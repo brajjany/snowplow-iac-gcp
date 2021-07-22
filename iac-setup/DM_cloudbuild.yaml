@@ -1,0 +1,253 @@
+imports:
+  - path: templates/cloudbuild.py
+    name: cloudbuild.py
+
+
+resources:
+  - name: snowplow-cloudbuild-auth
+    type: cloudbuild.py
+    properties:
+      steps:
+        - name: 'gcr.io/cloud-builders/gcloud'
+          args:
+          - container
+          - clusters
+          - get-credentials
+          - snowplow-cluster
+          - --zone= #TODO: your desired zone, e.g. europe-west1-c
+
+        # Get credentials secret here
+        - name: gcr.io/cloud-builders/gcloud
+          entrypoint: 'bash'
+          args: [ '-c', "gcloud secrets versions access latest --secret=sa_json --format='get(payload.data)' | tr '_-' '/+' | base64 -d > credentials-secret.yaml" ]
+        - name: "gcr.io/cloud-builders/gke-deploy"
+          args:
+            - run
+            - --filename=credentials-secret.yaml
+            - --location= #TODO: your desired zone, e.g. europe-west1-c
+            - --cluster=snowplow-cluster
+
+  - name: snowplow-cloudbuild-enrichment-secret
+    type: cloudbuild.py
+    properties:
+      steps:
+        # Get credentials secret here
+        - name: gcr.io/cloud-builders/gcloud
+          entrypoint: 'bash'
+          args: [ '-c', "gcloud secrets versions access latest --secret=enrichments --format='get(payload.data)' | tr '_-' '/+' | base64 -d > enrichments.yaml" ]
+        - name: "gcr.io/cloud-builders/gke-deploy"
+          args:
+            - run
+            - --filename=enrichments.yaml
+            - --location= #TODO: your desired zone, e.g. europe-west1-c
+            - --cluster=snowplow-cluster
+
+  # Job name: Create a config map for collector deployment (hocon file)
+  - name: snowplow-cloudbuild-configmap
+    type: cloudbuild.py
+    properties:
+      steps:
+        - name: 'gcr.io/cloud-builders/gcloud'
+          args:
+          - source
+          - repos
+          - clone
+          - #TODO: name of your github repository
+          - --project= #TODO: Add project id
+
+        # ConfigMap reference YAML
+        - name: "gcr.io/cloud-builders/gke-deploy"
+          args:
+          - run
+          - --filename= #TODO: GITHUB REPO NAME/iac-setup/k8s/collector/collector-config-dm.yaml
+          - --location= #TODO: your desired zone, e.g. europe-west1-c
+          - --cluster=snowplow-cluster
+
+  # Job name: Create a config map for collector deployment (domain certificate)
+  - name: snowplow-cloudbuild-deploy-collector-certificate
+    type: cloudbuild.py
+    properties:
+      steps:
+        - name: 'gcr.io/cloud-builders/gcloud'
+          args:
+          - source
+          - repos
+          - clone
+          - #TODO: Github repo name
+          - --project= #TODO: GCP project id
+
+        # ConfigMap reference YAML
+        - name: "gcr.io/cloud-builders/gke-deploy"
+          args:
+          - run
+          - --filename= #TODO: GITHUB REPO NAME/iac-setup/k8s/collector/collector-certificate-dm.yaml
+          - --location= #TODO: your desired zone, e.g. europe-west1-c
+          - --cluster=snowplow-cluster
+
+  # Deploy collector
+  - name: snowplow-cloudbuild-deploy-collector
+    type: cloudbuild.py
+    properties:
+      steps:
+        - name: 'gcr.io/cloud-builders/gcloud'
+          args:
+          - source
+          - repos
+          - clone
+          - #TODO: your desired zone, e.g. europe-west1-c
+          - --project= #TODO: project id
+
+        # Step 2 - Deploy scala stream collector
+        - name: "gcr.io/cloud-builders/gke-deploy"
+          args:
+          - run
+          - --filename= #TODO: GITHUB REPO NAME/iac-setup/k8s/collector/scala-stream-collector-dm.yaml
+          - --location= #TODO: your desired zone, e.g. europe-west1-c
+          - --cluster=snowplow-cluster
+
+  # Create service endpoint for Collector deployment
+  - name: snowplow-cloudbuild-deploy-collector-service
+    type: cloudbuild.py
+    properties:
+      steps:
+        - name: 'gcr.io/cloud-builders/gcloud'
+          args:
+          - source
+          - repos
+          - clone
+          - #TODO: Github repo name
+          - --project= #TODO: project id
+
+        # Create service endpoint for Collector deployment
+        - name: "gcr.io/cloud-builders/gke-deploy"
+          args:
+          - run
+          - --filename= #TODO: ADD GITHUB NAME/iac-setup/k8s/collector/collector-service-dm.yaml
+          - --location= #TODO: your desired zone, e.g. europe-west1-c
+          - --cluster=snowplow-cluster
+
+  # Create ingress for Collector service
+  - name: snowplow-cloudbuild-deploy-collector-ingress
+    type: cloudbuild.py
+    properties:
+      steps:
+        - name: 'gcr.io/cloud-builders/gcloud'
+          args:
+          - source
+          - repos
+          - clone
+          - #TODO: Github name
+          - --project= #TODO: your project id
+
+        - name: "gcr.io/cloud-builders/gke-deploy"
+          args:
+          - run
+          - --filename= #TODO: ADD GITHUB PROJECT/iac-setup/k8s/collector/collector-ingress-dm.yaml
+          - --location= #TODO: your desired zone, e.g. europe-west1-c
+          - --cluster=snowplow-cluster
+
+  # Configmap for beam enrich (resolver)
+  - name: snowplow-cloudbuild-resolver-configmap
+    type: cloudbuild.py
+    properties:
+      steps:
+        - name: 'gcr.io/cloud-builders/gcloud'
+          args:
+          - source
+          - repos
+          - clone
+          -  #TODO: ADD GITHUB PROJECT
+          - --project= #TODO: Add project id
+
+        #Create ConfigMap
+        - name: "gcr.io/cloud-builders/gke-deploy"
+          args:
+          - run
+          - --filename= #TODO: ADD GITHUB PROJECT/iac-setup/k8s/beam-enrich/resolver.yaml
+          - --location= #TODO: your desired zone, e.g. europe-west1-c
+          - --cluster=snowplow-cluster
+
+  # Deploy beam enrich
+  - name: snowplow-cloudbuild-deploy-beam-enrich
+    type: cloudbuild.py
+    properties:
+      steps:
+        - name: 'gcr.io/cloud-builders/gcloud'
+          args:
+          - source
+          - repos
+          - clone
+          -  #TODO: ADD GITHUB PROJECT
+          - --project= #TODO: Add project id
+
+        # Step 2 - Deploy beam enrich
+        - name: "gcr.io/cloud-builders/gke-deploy"
+          args:
+          - run
+          - --filename= #TODO: ADD GITHUB PROJECT/iac-setup/k8s/beam-enrich/beam-enrich-dm.yaml
+          - --location= #TODO: your desired zone, e.g. europe-west1-c
+          - --cluster=snowplow-cluster
+
+# BIG QUERY STORAGE STARTS HERE
+
+  # Configmap for bq
+  - name: snowplow-cloudbuild-bq-configmap
+    type: cloudbuild.py
+    properties:
+      steps:
+        - name: 'gcr.io/cloud-builders/gcloud'
+          args:
+          - source
+          - repos
+          - clone
+          -  #TODO: ADD GITHUB PROJECT
+          - --project= #TODO: Add project id
+
+        #Create ConfigMap XX
+        - name: "gcr.io/cloud-builders/gke-deploy"
+          args:
+          - run
+          - --filename= #TODO: ADD GITHUB PROJECT/iac-setup/k8s/bq/bq-config-dm.yaml
+          - --location= #TODO: your desired zone, e.g. europe-west1-c
+          - --cluster=snowplow-cluster
+
+  # Deploy bq
+  - name: snowplow-cloudbuild-deploy-bq-loader
+    type: cloudbuild.py
+    properties:
+      steps:
+        - name: 'gcr.io/cloud-builders/gcloud'
+          args:
+          - source
+          - repos
+          - clone
+          -  #TODO: ADD GITHUB PROJECT
+          - --project= #TODO: Add project id
+
+        # Deploy bq loader
+        - name: "gcr.io/cloud-builders/gke-deploy"
+          args:
+          - run
+          - --filename= #TODO: ADD GITHUB PROJECT/iac-setup/k8s/bq/bq-loader-dm.yaml
+          - --location= #TODO: your desired zone, e.g. europe-west1-c
+          - --cluster=snowplow-cluster
+
+  - name: snowplow-cloudbuild-deploy-bq-mutator-listener
+    type: cloudbuild.py
+    properties:
+      steps:
+        - name: 'gcr.io/cloud-builders/gcloud'
+          args:
+          - source
+          - repos
+          - clone
+          -  #TODO: ADD GITHUB PROJECT
+          - --project= #TODO: Add project id
+
+        # Deploy bq mutator
+        - name: "gcr.io/cloud-builders/gke-deploy"
+          args:
+          - run
+          - --filename= #TODO: ADD GITHUB PROJECT/iac-setup/k8s/bq/bq-mutator-listener-dm.yaml
+          - --location= #TODO: your desired zone, e.g. europe-west1-c
+          - --cluster=snowplow-cluster

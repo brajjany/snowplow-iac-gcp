@@ -1,0 +1,15 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: collector-service
+  labels:
+    app: snowplow-collector-node-dm
+spec:
+  selector:
+    app: snowplow-collector-node-dm
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 8080
+    name: http
+  type: NodePort

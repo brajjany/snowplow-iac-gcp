@@ -1,0 +1,11 @@
+apiVersion: v1
+data:
+  bigquery_config.json: #TODO: bigquery_config.json encoded base64
+
+  # Use base64 encryption with -w 0 flag on iglu_resolver.json
+  iglu_resolver.json: #TODO: iglu_resolver.json encoded base64
+kind: ConfigMap
+metadata:
+  name: bq-config-dm
+  namespace: default
+  selfLink: /api/v1/namespaces/default/configmaps/bq-config-dm

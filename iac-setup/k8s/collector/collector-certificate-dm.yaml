@@ -1,0 +1,7 @@
+apiVersion: networking.gke.io/v1beta2
+kind: ManagedCertificate
+metadata:
+  name: my-cert
+spec:
+  domains:
+    - #TODO your domain name, e.g. snowplow.some-domain-name.com

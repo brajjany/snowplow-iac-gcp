@@ -1,0 +1,26 @@
+imports:
+  - path: templates/cloudbuild.py
+    name: cloudbuild.py
+
+
+resources:
+  # Job name: Create a config map for collector deployment (hocon file)
+  - name: snowplow-cloudbuild-configmap
+    type: cloudbuild.py
+    properties:
+      steps:
+        - name: 'gcr.io/cloud-builders/gcloud'
+          args:
+          - source
+          - repos
+          - clone
+          -  #TODO: ADD GITHUB PROJECT
+          - --project= #TODO: Add project id
+
+        # ConfigMap reference YAML
+        - name: "gcr.io/cloud-builders/gke-deploy"
+          args:
+          - run
+          - --filename= #TODO: ADD GITHUB PROJECT/iac-setup/k8s/collector/collector-config-dm.yaml
+          - --location= #TODO: Add desired location, e.g. europe-west1-c
+          - --cluster=snowplow-cluster

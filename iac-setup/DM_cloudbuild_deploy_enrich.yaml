@@ -1,0 +1,49 @@
+imports:
+  - path: templates/cloudbuild.py
+    name: cloudbuild.py
+
+
+resources:
+  - name: snowplow-cloudbuild-auth
+    type: cloudbuild.py
+    properties:
+      steps:
+        - name: 'gcr.io/cloud-builders/gcloud'
+          args:
+          - container
+          - clusters
+          - get-credentials
+          - snowplow-cluster
+          - --zone= #TODO: your desired zone, e.g. europe-west1-c
+
+        # Get credentials secret here
+        - name: gcr.io/cloud-builders/gcloud
+          entrypoint: 'bash'
+          args: [ '-c', "gcloud secrets versions access latest --secret=sa_json --format='get(payload.data)' | tr '_-' '/+' | base64 -d > credentials-secret.yaml" ]
+        - name: "gcr.io/cloud-builders/gke-deploy"
+          args:
+            - run
+            - --filename=credentials-secret.yaml
+            - --location= #TODO: your desired zone, e.g. europe-west1-c
+            - --cluster=snowplow-cluster
+ 
+  # Deploy beam enrich
+  - name: snowplow-cloudbuild-deploy-beam-enrich
+    type: cloudbuild.py
+    properties:
+      steps:
+        - name: 'gcr.io/cloud-builders/gcloud'
+          args:
+          - source
+          - repos
+          - clone
+          -  #TODO: ADD GITHUB PROJECT
+          - --project= #TODO: Add github project
+
+        # Step 2 - Deploy beam enrich
+        - name: "gcr.io/cloud-builders/gke-deploy"
+          args:
+          - run
+          - --filename= #TODO: ADD GITHUB PROJECT/iac-setup/k8s/beam-enrich/beam-enrich-dm.yaml
+          - --location= #TODO: your desired zone, e.g. europe-west1-c
+          - --cluster=snowplow-cluster

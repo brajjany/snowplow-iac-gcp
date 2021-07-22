@@ -1,0 +1,90 @@
+imports:
+  - path: templates/cloudbuild.py
+    name: cloudbuild.py
+
+
+resources:
+  - name: snowplow-cloudbuild-auth
+    type: cloudbuild.py
+    properties:
+      steps:
+        - name: 'gcr.io/cloud-builders/gcloud'
+          args:
+          - container
+          - clusters
+          - get-credentials
+          - snowplow-cluster
+          - --zone= #TODO: your desired zone, e.g. europe-west1-c
+
+        # Get credentials secret here
+        - name: gcr.io/cloud-builders/gcloud
+          entrypoint: 'bash'
+          args: [ '-c', "gcloud secrets versions access latest --secret=sa_json --format='get(payload.data)' | tr '_-' '/+' | base64 -d > credentials-secret.yaml" ]
+        - name: "gcr.io/cloud-builders/gke-deploy"
+          args:
+            - run
+            - --filename=credentials-secret.yaml
+            - --location= #TODO: your desired zone, e.g. europe-west1-c
+            - --cluster=snowplow-cluster
+
+  # Deploy collector
+  - name: snowplow-cloudbuild-deploy-collector
+    type: cloudbuild.py
+    properties:
+      steps:
+        - name: 'gcr.io/cloud-builders/gcloud'
+          args:
+          - source
+          - repos
+          - clone
+          -  #TODO: ADD GITHUB PROJECT
+          - --project= #TODO: Add github project
+
+        # Step 2 - Deploy scala stream collector
+        - name: "gcr.io/cloud-builders/gke-deploy"
+          args:
+          - run
+          - --filename= #TODO: ADD GITHUB PROJECT/iac-setup/k8s/collector/scala-stream-collector-dm.yaml
+          - --location= #TODO: your desired zone, e.g. europe-west1-c
+          - --cluster=snowplow-cluster
+
+  # Create service endpoint for Collector deployment
+  - name: snowplow-cloudbuild-deploy-collector-service
+    type: cloudbuild.py
+    properties:
+      steps:
+        - name: 'gcr.io/cloud-builders/gcloud'
+          args:
+          - source
+          - repos
+          - clone
+          -  #TODO: ADD GITHUB PROJECT
+          - --project= #TODO: Add github project
+
+        # Create service endpoint for Collector deployment
+        - name: "gcr.io/cloud-builders/gke-deploy"
+          args:
+          - run
+          - --filename= #TODO: ADD GITHUB PROJECT/iac-setup/k8s/collector/collector-service-dm.yaml
+          - --location= #TODO: your desired zone, e.g. europe-west1-c
+          - --cluster=snowplow-cluster
+
+  # Create ingress for Collector service
+  - name: snowplow-cloudbuild-deploy-collector-ingress
+    type: cloudbuild.py
+    properties:
+      steps:
+        - name: 'gcr.io/cloud-builders/gcloud'
+          args:
+          - source
+          - repos
+          - clone
+          -  #TODO: ADD GITHUB PROJECT
+          - --project= #TODO: Add github project
+
+        - name: "gcr.io/cloud-builders/gke-deploy"
+          args:
+          - run
+          - --filename= #TODO: ADD GITHUB PROJECT/iac-setup/k8s/collector/collector-ingress-dm.yaml
+          - --location= #TODO: your desired zone, e.g. europe-west1-c
+          - --cluster=snowplow-cluster

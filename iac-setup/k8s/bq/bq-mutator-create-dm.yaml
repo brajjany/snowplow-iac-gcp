@@ -1,0 +1,40 @@
+---
+apiVersion: "v1"
+kind: "Namespace"
+metadata:
+  name: "default"
+---
+apiVersion: "apps/v1"
+kind: "Deployment"
+metadata:
+  name: "bq-mutator-create-dm"
+  namespace: "default"
+  labels:
+    app: "bq-mutator-create-dm"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: "bq-mutator-create-dm"
+  template:
+    metadata:
+      labels:
+        app: "bq-mutator-create-dm"
+    spec:
+      containers:
+      - name: "bq-mutator-create-dm"
+        image: "docker.io/snowplow/snowplow-bigquery-mutator:0.6.2"
+        args:
+          - create
+          - --config
+          - #TODO: bigquery_config.json encoded base64
+          - --resolver
+          - #TODO: iglu_resolver.json encoded base64        
+        env:
+        volumeMounts:
+        - name: bq-config-dm
+          mountPath: /snowplow/bq-config-dm
+      volumes:
+      - name: bq-config-dm
+        configMap:
+          name: bq-config-dm

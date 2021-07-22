@@ -1,0 +1,576 @@
+imports:
+  - path: templates/service_account.jinja
+    name: service_account.jinja
+
+  - path: templates/cluster.jinja
+    name: cluster.jinja
+
+  - path: templates/pubsub_topic.jinja
+    name: pubsub_topic.jinja
+
+  - path: templates/iam_member.py
+    name: iam_member.py
+
+  - path: templates/bigquery_dataset.py
+    name: bigquery_dataset.py
+
+  - path: templates/bigquery_table.py
+    name: bigquery_table.py
+
+  - path: templates/gcs_bucket.py
+    name: gcs_bucket.py
+
+resources:
+
+#Create a Service Account that snowplow infratructure will use from template service_account.jinja
+- name: &SA_NAME snowplow-dm-prod-sa
+  type: service_account.jinja
+
+#Assign IAM Roles to the Service Account that was just created.
+- name: iam-member-test
+  type: iam_member.py
+  properties:
+    roles:
+      - role: roles/deploymentmanager.editor
+        members:
+          - serviceAccount:$(ref.snowplow-dm-prod-sa.email)
+      - role: roles/cloudbuild.builds.builder
+        members:
+          - serviceAccount:$(ref.snowplow-dm-prod-sa.email)
+      - role: roles/container.admin
+        members:
+          - serviceAccount:$(ref.snowplow-dm-prod-sa.email)
+      - role: roles/pubsub.admin
+        members:
+          - serviceAccount:$(ref.snowplow-dm-prod-sa.email)
+      - role: roles/bigquery.admin
+        members:
+          - serviceAccount:$(ref.snowplow-dm-prod-sa.email)
+      - role: roles/dataflow.admin
+        members:
+          - serviceAccount:$(ref.snowplow-dm-prod-sa.email)
+      - role: roles/storage.admin
+        members:
+          - serviceAccount:$(ref.snowplow-dm-prod-sa.email)
+      - role: roles/compute.admin
+        members:
+          - serviceAccount:$(ref.snowplow-dm-prod-sa.email)
+      - role: roles/owner
+        members:
+          - serviceAccount:$(ref.snowplow-dm-prod-sa.email)
+      - role: roles/iam.serviceAccountTokenCreator
+        members:
+          - serviceAccount:$(ref.snowplow-dm-prod-sa.email)
+      - role: roles/dataflow.worker
+        members:
+          - serviceAccount:$(ref.snowplow-dm-prod-sa.email)
+      - role: roles/storage.objectAdmin
+        members:
+          - serviceAccount:$(ref.snowplow-dm-prod-sa.email)
+      - role: roles/dataflow.serviceAgent
+        members:
+          - serviceAccount:$(ref.snowplow-dm-prod-sa.email)
+
+- name: snowplow-cluster
+  type: container.v1.cluster
+  properties:
+    zone: #TODO: your desired zone, e.g. europe-west1-c
+    cluster:
+      name: snowplow-cluster
+
+      nodePools:
+      - name: default-pool
+        initialNodeCount: 4
+        autoscaling:
+          enabled: true
+          minNodeCount: 3
+          maxNodeCount: 10
+          autoprovisioned: false
+        config:
+          serviceAccount: $(ref.snowplow-dm-prod-sa.email)
+          machineType: n1-standard-1
+          diskSizeGb: 150
+          oauthScopes:
+            - https://www.googleapis.com/auth/cloud-platform
+
+# Create BigQuery
+- name: snowplow-dataset
+  type: bigquery_dataset.py
+  properties:
+    serviceAccountId: *SA_NAME
+    name: snowplow
+    location: EU
+    access:
+      - role: OWNER
+        userByEmail: #TODO: set owner name
+
+- name: snowplow_events
+  type: bigquery_table.py
+  properties:
+    serviceAccountId: *SA_NAME
+    name: events
+    datasetId: $(ref.snowplow-dataset.datasetId)
+    timePartitioning:
+      type: DAY
+      field: derived_tstamp
+      description: This table is the atomic events table of the Snowplow platform. Contains Snowplow events at its most granular format.
+    schema:
+      - mode: NULLABLE
+        name: app_id
+        type: STRING
+      - mode: NULLABLE
+        name: platform
+        type: STRING
+      - mode: NULLABLE
+        name: etl_tstamp
+        type: TIMESTAMP
+      - mode: REQUIRED
+        name: collector_tstamp
+        type: TIMESTAMP
+      - mode: NULLABLE
+        name: dvce_created_tstamp
+        type: TIMESTAMP
+      - mode: NULLABLE
+        name: event
+        type: STRING
+      - mode: REQUIRED
+        name: event_id
+        type: STRING
+      - mode: NULLABLE
+        name: txn_id
+        type: INTEGER
+      - mode: NULLABLE
+        name: name_tracker
+        type: STRING
+      - mode: NULLABLE
+        name: v_tracker
+        type: STRING
+      - mode: REQUIRED
+        name: v_collector
+        type: STRING
+      - mode: REQUIRED
+        name: v_etl
+        type: STRING
+      - mode: NULLABLE
+        name: user_id
+        type: STRING
+      - mode: NULLABLE
+        name: user_ipaddress
+        type: STRING
+      - mode: NULLABLE
+        name: user_fingerprint
+        type: STRING
+      - mode: NULLABLE
+        name: domain_userid
+        type: STRING
+      - mode: NULLABLE
+        name: domain_sessionidx
+        type: INTEGER
+      - mode: NULLABLE
+        name: network_userid
+        type: STRING
+      - mode: NULLABLE
+        name: geo_country
+        type: STRING
+      - mode: NULLABLE
+        name: geo_region
+        type: STRING
+      - mode: NULLABLE
+        name: geo_city
+        type: STRING
+      - mode: NULLABLE
+        name: geo_zipcode
+        type: STRING
+      - mode: NULLABLE
+        name: geo_latitude
+        type: FLOAT
+      - mode: NULLABLE
+        name: geo_longitude
+        type: FLOAT
+      - mode: NULLABLE
+        name: geo_region_name
+        type: STRING
+      - mode: NULLABLE
+        name: ip_isp
+        type: STRING
+      - mode: NULLABLE
+        name: ip_organization
+        type: STRING
+      - mode: NULLABLE
+        name: ip_domain
+        type: STRING
+      - mode: NULLABLE
+        name: ip_netspeed
+        type: STRING
+      - mode: NULLABLE
+        name: page_url
+        type: STRING
+      - mode: NULLABLE
+        name: page_title
+        type: STRING
+      - mode: NULLABLE
+        name: page_referrer
+        type: STRING
+      - mode: NULLABLE
+        name: page_urlscheme
+        type: STRING
+      - mode: NULLABLE
+        name: page_urlhost
+        type: STRING
+      - mode: NULLABLE
+        name: page_urlport
+        type: INTEGER
+      - mode: NULLABLE
+        name: page_urlpath
+        type: STRING
+      - mode: NULLABLE
+        name: page_urlquery
+        type: STRING
+      - mode: NULLABLE
+        name: page_urlfragment
+        type: STRING
+      - mode: NULLABLE
+        name: refr_urlscheme
+        type: STRING
+      - mode: NULLABLE
+        name: refr_urlhost
+        type: STRING
+      - mode: NULLABLE
+        name: refr_urlport
+        type: INTEGER
+      - mode: NULLABLE
+        name: refr_urlpath
+        type: STRING
+      - mode: NULLABLE
+        name: refr_urlquery
+        type: STRING
+      - mode: NULLABLE
+        name: refr_urlfragment
+        type: STRING
+      - mode: NULLABLE
+        name: refr_medium
+        type: STRING
+      - mode: NULLABLE
+        name: refr_source
+        type: STRING
+      - mode: NULLABLE
+        name: refr_term
+        type: STRING
+      - mode: NULLABLE
+        name: mkt_medium
+        type: STRING
+      - mode: NULLABLE
+        name: mkt_source
+        type: STRING
+      - mode: NULLABLE
+        name: mkt_term
+        type: STRING
+      - mode: NULLABLE
+        name: mkt_content
+        type: STRING
+      - mode: NULLABLE
+        name: mkt_campaign
+        type: STRING
+      - mode: NULLABLE
+        name: se_category
+        type: STRING
+      - mode: NULLABLE
+        name: se_action
+        type: STRING
+      - mode: NULLABLE
+        name: se_label
+        type: STRING
+      - mode: NULLABLE
+        name: se_property
+        type: STRING
+      - mode: NULLABLE
+        name: se_value
+        type: FLOAT
+      - mode: NULLABLE
+        name: tr_orderid
+        type: STRING
+      - mode: NULLABLE
+        name: tr_affiliation
+        type: STRING
+      - mode: NULLABLE
+        name: tr_total
+        type: FLOAT
+      - mode: NULLABLE
+        name: tr_tax
+        type: FLOAT
+      - mode: NULLABLE
+        name: tr_shipping
+        type: FLOAT
+      - mode: NULLABLE
+        name: tr_city
+        type: STRING
+      - mode: NULLABLE
+        name: tr_state
+        type: STRING
+      - mode: NULLABLE
+        name: tr_country
+        type: STRING
+      - mode: NULLABLE
+        name: ti_orderid
+        type: STRING
+      - mode: NULLABLE
+        name: ti_sku
+        type: STRING
+      - mode: NULLABLE
+        name: ti_name
+        type: STRING
+      - mode: NULLABLE
+        name: ti_category
+        type: STRING
+      - mode: NULLABLE
+        name: ti_price
+        type: FLOAT
+      - mode: NULLABLE
+        name: ti_quantity
+        type: INTEGER
+      - mode: NULLABLE
+        name: pp_xoffset_min
+        type: INTEGER
+      - mode: NULLABLE
+        name: pp_xoffset_max
+        type: INTEGER
+      - mode: NULLABLE
+        name: pp_yoffset_min
+        type: INTEGER
+      - mode: NULLABLE
+        name: pp_yoffset_max
+        type: INTEGER
+      - mode: NULLABLE
+        name: useragent
+        type: STRING
+      - mode: NULLABLE
+        name: br_name
+        type: STRING
+      - mode: NULLABLE
+        name: br_family
+        type: STRING
+      - mode: NULLABLE
+        name: br_version
+        type: STRING
+      - mode: NULLABLE
+        name: br_type
+        type: STRING
+      - mode: NULLABLE
+        name: br_renderengine
+        type: STRING
+      - mode: NULLABLE
+        name: br_lang
+        type: STRING
+      - mode: NULLABLE
+        name: br_features_pdf
+        type: BOOLEAN
+      - mode: NULLABLE
+        name: br_features_flash
+        type: BOOLEAN
+      - mode: NULLABLE
+        name: br_features_java
+        type: BOOLEAN
+      - mode: NULLABLE
+        name: br_features_director
+        type: BOOLEAN
+      - mode: NULLABLE
+        name: br_features_quicktime
+        type: BOOLEAN
+      - mode: NULLABLE
+        name: br_features_realplayer
+        type: BOOLEAN
+      - mode: NULLABLE
+        name: br_features_windowsmedia
+        type: BOOLEAN
+      - mode: NULLABLE
+        name: br_features_gears
+        type: BOOLEAN
+      - mode: NULLABLE
+        name: br_features_silverlight
+        type: BOOLEAN
+      - mode: NULLABLE
+        name: br_cookies
+        type: BOOLEAN
+      - mode: NULLABLE
+        name: br_colordepth
+        type: STRING
+      - mode: NULLABLE
+        name: br_viewwidth
+        type: INTEGER
+      - mode: NULLABLE
+        name: br_viewheight
+        type: INTEGER
+      - mode: NULLABLE
+        name: os_name
+        type: STRING
+      - mode: NULLABLE
+        name: os_family
+        type: STRING
+      - mode: NULLABLE
+        name: os_manufacturer
+        type: STRING
+      - mode: NULLABLE
+        name: os_timezone
+        type: STRING
+      - mode: NULLABLE
+        name: dvce_type
+        type: STRING
+      - mode: NULLABLE
+        name: dvce_ismobile
+        type: BOOLEAN
+      - mode: NULLABLE
+        name: dvce_screenwidth
+        type: INTEGER
+      - mode: NULLABLE
+        name: dvce_screenheight
+        type: INTEGER
+      - mode: NULLABLE
+        name: doc_charset
+        type: STRING
+      - mode: NULLABLE
+        name: doc_width
+        type: INTEGER
+      - mode: NULLABLE
+        name: doc_height
+        type: INTEGER
+      - mode: NULLABLE
+        name: tr_currency
+        type: STRING
+      - mode: NULLABLE
+        name: tr_total_base
+        type: FLOAT
+      - mode: NULLABLE
+        name: tr_tax_base
+        type: FLOAT
+      - mode: NULLABLE
+        name: tr_shipping_base
+        type: FLOAT
+      - mode: NULLABLE
+        name: ti_currency
+        type: STRING
+      - mode: NULLABLE
+        name: ti_price_base
+        type: FLOAT
+      - mode: NULLABLE
+        name: base_currency
+        type: STRING
+      - mode: NULLABLE
+        name: geo_timezone
+        type: STRING
+      - mode: NULLABLE
+        name: mkt_clickid
+        type: STRING
+      - mode: NULLABLE
+        name: mkt_network
+        type: STRING
+      - mode: NULLABLE
+        name: etl_tags
+        type: STRING
+      - mode: NULLABLE
+        name: dvce_sent_tstamp
+        type: TIMESTAMP
+      - mode: NULLABLE
+        name: refr_domain_userid
+        type: STRING
+      - mode: NULLABLE
+        name: refr_dvce_tstamp
+        type: TIMESTAMP
+      - mode: NULLABLE
+        name: domain_sessionid
+        type: STRING
+      - mode: NULLABLE
+        name: derived_tstamp
+        type: TIMESTAMP
+      - mode: NULLABLE
+        name: event_vendor
+        type: STRING
+      - mode: NULLABLE
+        name: event_name
+        type: STRING
+      - mode: NULLABLE
+        name: event_format
+        type: STRING
+      - mode: NULLABLE
+        name: event_version
+        type: STRING
+      - mode: NULLABLE
+        name: event_fingerprint
+        type: STRING
+      - mode: NULLABLE
+        name: true_tstamp
+        type: TIMESTAMP
+
+
+# Create topics
+- name: bad
+  type: pubsub_topic.jinja
+  properties:
+    serviceAccountId: *SA_NAME
+
+- name: bq-bad-rows
+  type: pubsub_topic.jinja
+  properties:
+    serviceAccountId: *SA_NAME
+
+- name: bq-failed-inserts
+  type: pubsub_topic.jinja
+  properties:
+    serviceAccountId: *SA_NAME
+
+- name: bq-types
+  type: pubsub_topic.jinja
+  properties:
+    serviceAccountId: *SA_NAME
+
+- name: enriched-bad
+  type: pubsub_topic.jinja
+  properties:
+    serviceAccountId: *SA_NAME
+
+- name: enriched-good
+  type: pubsub_topic.jinja
+  properties:
+    serviceAccountId: *SA_NAME
+
+- name: good
+  type: pubsub_topic.jinja
+  properties:
+    serviceAccountId: *SA_NAME
+
+- name: pii-topic
+  type: pubsub_topic.jinja
+  properties:
+    serviceAccountId: *SA_NAME
+
+# Create subscriptions
+- name: bq-types-sub
+  type: pubsub.v1.subscription #this is an example of NOT using a template. Instead the "raw" type is used. If more properities need to be set a template should be used.
+  properties:
+    subscription: "bq-types-sub"
+    topic: $(ref.bq-types.name)
+    ackDeadlineSeconds: 600
+    expirationPolicy: {}
+
+- name: enriched-good-sub
+  type: pubsub.v1.subscription #this is an example of NOT using a template. Instead the "raw" type is used. If more properities need to be set a template should be used.
+  properties:
+    subscription: "enriched-good-sub"
+    topic: $(ref.enriched-good.name)
+    ackDeadlineSeconds: 600
+    expirationPolicy: {}
+
+- name: good-sub
+  type: pubsub.v1.subscription #this is an example of NOT using a template. Instead the "raw" type is used. If more properities need to be set a template should be used.
+  properties:
+    subscription: "good-sub"
+    topic: $(ref.good.name)
+    ackDeadlineSeconds: 600
+    expirationPolicy: {}
+
+- name: test-good
+  type: pubsub.v1.subscription #this is an example of NOT using a template. Instead the "raw" type is used. If more properities need to be set a template should be used.
+  properties:
+    subscription: "test-good"
+    topic: $(ref.good.name)
+    ackDeadlineSeconds: 600
+    expirationPolicy: {}

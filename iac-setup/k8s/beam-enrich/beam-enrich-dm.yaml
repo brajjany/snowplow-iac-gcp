@@ -1,0 +1,66 @@
+---
+apiVersion: "v1"
+kind: "Namespace"
+metadata:
+  name: "default"
+---
+apiVersion: "batch/v1"
+kind: "Job"
+metadata:
+  name: "beam-enrich-dm"
+  namespace: "default"
+  labels:
+    app: "beam-enrich-dm"
+spec:
+  ttlSecondsAfterFinished: 20
+  template:
+    metadata:
+      labels:
+        app: "beam-enrich-dm"
+    spec:
+      containers:
+      - name: "beam-enrich-dm"
+        image: "docker.io/snowplow/beam-enrich:1.4.2"
+        securityContext:
+           allowPrivilegeEscalation: false
+           runAsUser: 0
+        args:
+          - --runner=DataFlowRunner
+          - --streaming=true
+          - --project=<project id>
+          - --region=<region>
+          - --gcpTempLocation=gs://snowplow-datascience-cto-office-temp/temp/
+          - --job-name=beam-enrich
+          - --raw=projects/<project id>/subscriptions/good-sub
+          - --enriched=projects/<project id>/topics/enriched-good
+          - --bad=projects/<project id>/topics/enriched-bad
+          - --pii=projects/<project id>/topics/pii-topic
+          - --enrichments=/snowplow/enrichments/
+          - --resolver=/snowplow/resolver/iglu_resolver.json
+          - --maxNumWorkers=10
+          # - --update
+          - --serviceAccount=snowplow-dm-prod-sa@<project id>.iam.gserviceaccount.com
+        env:
+        - name: GOOGLE_APPLICATION_CREDENTIALS
+          value: /snowplow/crds/sa_credentials.json
+        volumeMounts:
+        - name: resolver
+          mountPath: /snowplow/resolver
+        - name: enrichments
+          mountPath: /snowplow/enrichments
+        - name: credentials-secret
+          mountPath: /snowplow/crds
+      volumes:
+      - name: resolver
+        configMap:
+          name: resolver
+      - name: enrichments
+        configMap:
+          name: enrichments
+      - name: credentials-secret
+        secret:
+          secretName: credentials-secret
+          items:
+          - key: sa_json
+            path: sa_credentials.json
+      restartPolicy: Never

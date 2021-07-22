@@ -1,0 +1,43 @@
+---
+apiVersion: "v1"
+kind: "Namespace"
+metadata:
+  name: "default"
+---
+apiVersion: "batch/v1"
+kind: "Job"
+metadata:
+  name: "bq-loader-dm"
+  namespace: "default"
+  labels:
+    app: "bq-loader-dm"
+spec:
+  ttlSecondsAfterFinished: 20
+  template:
+    metadata:
+      labels:
+        app: "bq-loader-dm"
+    spec:
+      containers:
+      - name: "bq-loader-dm"
+        image: "docker.io/snowplow/snowplow-bigquery-loader:0.6.2"
+        args:
+          - --config=bigquery_config.json encoded base64
+          - --resolver=igly_resolver.json encoded base64
+          - --runner=DataFlowRunner
+          - --project=<project id>
+          - --region=<region>
+          - --gcpTempLocation= #TODO: GCS location for temp bucket
+          - --maxNumWorkers=10
+          - --jobName=bq-loader
+          #- --update # Use only when loader needs to be updated to e.g. new docker version
+          - --serviceAccount=snowplow-dm-prod-sa@snowplow-cto-office.iam.gserviceaccount.com
+        env:
+        volumeMounts:
+        - name: bq-config-dm
+          mountPath: /snowplow/bq-config-dm
+      volumes:
+      - name: bq-config-dm
+        configMap:
+          name: bq-config-dm
+      restartPolicy: Never
