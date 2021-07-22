@@ -3,6 +3,7 @@
 This repo contains files for automatic deployment of the Snowplow's open source technology (https://github.com/snowplow) on Google Cloud Platform.
 
 Following GCP services have been used:
+```
 *) Dataflow
 *) GKE (load balancing, ingression, compute)
 *) GCS
@@ -11,6 +12,7 @@ Following GCP services have been used:
 *) Deployment Manager
 *) Cloud Build
 *) Secret Manager
+```
 
 ### Steps MANUAL
 ```
